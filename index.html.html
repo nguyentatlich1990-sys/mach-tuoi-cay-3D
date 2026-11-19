@@ -1,0 +1,749 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Mạch tưới cây 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a dark 3D workbench stage on the left, controls and a pin inspector on the right; stacks below 900px. */
+:root {
+  --bg: #eef2f1;
+  --surface: #ffffff;
+  --fg: #13201e;
+  --muted: #55686a;
+  --line: #d3dcda;
+  --soft: #e4ecea;
+  --accent: #00796b;
+  --accent-fg: #ffffff;
+  --warn: #c2570c;
+  --stage: #0e1a1f;
+  --font: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1312; --surface: #131f1e; --fg: #e5eeec; --muted: #8ea39f; --line: #243433; --soft: #1b2b2a;
+    --accent: #3dd6c1; --accent-fg: #04201c; --warn: #f0914a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1312; --surface: #131f1e; --fg: #e5eeec; --muted: #8ea39f; --line: #243433; --soft: #1b2b2a;
+  --accent: #3dd6c1; --accent-fg: #04201c; --warn: #f0914a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px;
+}
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 16px; max-width: 1480px; margin: 0 auto; align-items: start; }
+.stage { position: relative; min-width: 0; border-radius: 12px; overflow: hidden; background: var(--stage); height: min(88vh, 860px); min-height: 440px; touch-action: none; }
+.view { position: absolute; inset: 0; }
+.view canvas { display: block; width: 100%; height: 100%; outline: none; }
+.hud { position: absolute; padding: 6px 10px; border-radius: 8px; background: rgba(8, 18, 22, 0.72); color: #d9e7e4; font-size: 12px; line-height: 1.4; pointer-events: none; }
+.hud.tl { top: 12px; left: 12px; max-width: calc(100% - 190px); }
+.hud.bl { left: 12px; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.hud i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.hud-btn { position: absolute; top: 12px; right: 12px; border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(8, 18, 22, 0.72); color: #e6f1ef; font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+.hud-btn:hover { background: rgba(30, 52, 58, 0.9); }
+.fail { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #e6f1ef; }
+.side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.side h1 { font-size: 20px; line-height: 1.25; margin: 4px 0 0; font-weight: 700; text-wrap: balance; }
+.side .sub { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+.card h2 { margin: 0 0 10px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.sliderwrap { position: relative; padding-top: 18px; }
+.th-tick { position: absolute; top: 0; left: calc(8px + (100% - 16px) * 0.4); transform: translateX(-50%); font-size: 11px; color: var(--warn); white-space: nowrap; font-weight: 600; }
+.th-tick::after { content: ""; display: block; width: 2px; height: 6px; background: var(--warn); margin: 1px auto 0; }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--warn) 0 40%, var(--accent) 40% 100%); }
+input[type=range]::-moz-range-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--warn) 0 40%, var(--accent) 40% 100%); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 22px; margin-top: -7px; border-radius: 6px; background: var(--fg); border: 2px solid var(--surface); }
+input[type=range]::-moz-range-thumb { width: 12px; height: 18px; border-radius: 6px; background: var(--fg); border: 2px solid var(--surface); }
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.check { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; cursor: pointer; }
+.check input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); }
+.check small { display: block; color: var(--muted); font-size: 12px; }
+.seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-top: 14px; background: var(--soft); padding: 4px; border-radius: 10px; }
+.seg button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 4px; border-radius: 7px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18); }
+.kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.kv > div { background: var(--soft); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.kv .k { font-size: 11px; color: var(--muted); }
+.kv .v { font-family: var(--mono); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kv .v[data-s="hi"] { color: var(--warn); }
+.kv .v[data-s="lo"] { color: var(--accent); }
+.info h3 { margin: 0; font-size: 16px; line-height: 1.3; }
+.info .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); margin-bottom: 6px; }
+.info dl { margin: 10px 0 0; display: grid; gap: 10px; }
+.info dt { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.info dd { margin: 2px 0 0; }
+.info ul { margin: 2px 0 0; padding-left: 18px; }
+.info .live { font-family: var(--mono); font-size: 13px; background: var(--soft); border-radius: 8px; padding: 6px 10px; display: inline-block; }
+.empty { color: var(--muted); margin: 0; }
+.grp { margin-bottom: 10px; }
+.grp:last-child { margin-bottom: 0; }
+.grp h3 { margin: 0 0 6px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; font-family: var(--mono); font-size: 12.5px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.foot { font-size: 12px; color: var(--muted); margin: 0; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 64vh; min-height: 380px; }
+  .hud.tl { max-width: calc(100% - 150px); }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="app">
+  <main class="stage" id="stage" aria-label="Mô hình 3D mạch tưới cây tự động">
+    <div id="view" class="view"></div>
+    <div class="hud tl">Kéo để xoay · cuộn hoặc chụm hai ngón để zoom · chạm vào chân vàng để xem chi tiết</div>
+    <button class="hud-btn" id="btn-home" type="button">Góc nhìn ban đầu</button>
+    <div class="hud bl" aria-hidden="true">
+      <span><i style="background:#d7263d"></i>+5V / +nguồn</span>
+      <span><i style="background:#9a7248"></i>GND</span>
+      <span><i style="background:#f2b01e"></i>DO</span>
+      <span><i style="background:#35c76a"></i>AO</span>
+      <span><i style="background:#a56bff"></i>D7 → IN</span>
+      <span><i style="background:#ff7a1a"></i>NO → bơm</span>
+      <span><i style="background:#8794a0"></i>cực − nguồn</span>
+    </div>
+  </main>
+
+  <aside class="side">
+    <header>
+      <h1>Mạch tưới cây tự động</h1>
+      <p class="sub">Arduino · cảm biến độ ẩm LM393 · rơ-le 1 kênh · bơm mini</p>
+    </header>
+
+    <section class="card" aria-labelledby="h-sim">
+      <h2 id="h-sim">Mô phỏng</h2>
+      <div class="row"><label for="moist">Độ ẩm đất</label><span class="num" id="moist-val" style="font-size:18px;font-weight:600">62%</span></div>
+      <div class="sliderwrap">
+        <span class="th-tick">Ngưỡng 40%</span>
+        <input id="moist" type="range" min="0" max="100" step="1" value="62" aria-describedby="moist-hint">
+      </div>
+      <div class="scale" id="moist-hint"><span>Khô</span><span>Ướt</span></div>
+      <label class="check" for="auto">
+        <input id="auto" type="checkbox">
+        <span>Chạy vòng lặp tự động
+          <small>Bơm chạy thì đất ẩm lên, bơm tắt thì đất khô dần. Quanh ngưỡng rơ-le đóng ngắt liên tục.</small></span>
+      </label>
+      <div class="seg" role="group" aria-label="Chế độ xem mạch">
+        <button type="button" data-mode="all" aria-pressed="true">Tất cả</button>
+        <button type="button" data-mode="ctrl" aria-pressed="false">Mạch 5V</button>
+        <button type="button" data-mode="load" aria-pressed="false">Mạch bơm</button>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-state">
+      <h2 id="h-state">Trạng thái</h2>
+      <div class="kv">
+        <div><div class="k">Cảm biến AO → A0</div><div class="v" id="s-ao">—</div></div>
+        <div><div class="k">Cảm biến DO → D2</div><div class="v" id="s-do">—</div></div>
+        <div><div class="k">D7 → IN rơ-le</div><div class="v" id="s-d7">—</div></div>
+        <div><div class="k">Cần gạt rơ-le</div><div class="v" id="s-rly">—</div></div>
+        <div><div class="k">Bơm</div><div class="v" id="s-pump">—</div></div>
+        <div><div class="k">Số lần đóng ngắt</div><div class="v" id="s-cnt">0</div></div>
+      </div>
+    </section>
+
+    <section class="card info" aria-labelledby="h-info" aria-live="polite">
+      <h2 id="h-info">Chân đã chọn</h2>
+      <div id="info"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-pins">
+      <h2 id="h-pins">Danh sách chân</h2>
+      <div id="pins"></div>
+    </section>
+
+    <p class="foot">Mô hình theo cấu hình phổ biến: rơ-le kích mức THẤP, DO = CAO khi đất khô. Module của bạn có thể khác, hãy kiểm tra bằng đèn LED và chữ ghi trên bo thật. Màu và vị trí dây chỉ để minh hoạ. Cần có mạng để tải thư viện Three.js.</p>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+'use strict';
+var stageEl = document.getElementById('stage');
+function fail(msg) { var p = document.createElement('p'); p.className = 'fail'; p.textContent = msg; stageEl.appendChild(p); }
+if (!window.THREE || !THREE.OrbitControls) { fail('Không tải được thư viện Three.js từ mạng. Hãy kiểm tra kết nối rồi tải lại trang.'); return; }
+
+const V3 = THREE.Vector3;
+const view = document.getElementById('view');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+catch (e) { fail('Trình duyệt này không hỗ trợ WebGL nên không hiển thị được mô hình 3D.'); return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+view.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1a1f);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 400);
+const HOME = { pos: new V3(2, 36, 54), target: new V3(2, 1, -1) };
+camera.position.copy(HOME.pos);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.copy(HOME.target);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 6; controls.maxDistance = 120; controls.maxPolarAngle = Math.PI * 0.495;
+controls.update();
+
+scene.add(new THREE.HemisphereLight(0xdfefff, 0x1a2428, 0.85));
+const dl = new THREE.DirectionalLight(0xffffff, 0.9); dl.position.set(20, 40, 25); scene.add(dl);
+const fl = new THREE.PointLight(0x7fe0d0, 0.35, 140); fl.position.set(-22, 18, 22); scene.add(fl);
+
+/* ---------- helpers ---------- */
+function M(color, o) {
+  const m = new THREE.MeshStandardMaterial(Object.assign({ color: color, roughness: 0.6, metalness: 0.1 }, o || {}));
+  return m;
+}
+function bx(g, w, h, d, x, y0, z, mat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y0 + h / 2, z); g.add(m); return m;
+}
+function cyl(g, rt, rb, h, x, y0, z, mat, seg) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg || 24), mat);
+  m.position.set(x, y0 + h / 2, z); g.add(m); return m;
+}
+function at(o, x, y, z) { o.position.set(x, y, z); return o; }
+const comps = {};
+function comp(id) { const g = new THREE.Group(); scene.add(g); comps[id] = g; return g; }
+function rr(x, a, b, w, h, r) {
+  x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r);
+  x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath();
+}
+function label(text, wh, fs, bg) {
+  const ch = 96;
+  const c = document.createElement('canvas');
+  let x = c.getContext('2d');
+  const font = '600 ' + fs + 'px system-ui, -apple-system, "Segoe UI", sans-serif';
+  x.font = font;
+  const cw = Math.ceil(x.measureText(text).width) + 36;
+  c.width = cw; c.height = ch;
+  x = c.getContext('2d');
+  x.fillStyle = bg || 'rgba(8,18,22,0.82)'; rr(x, 2, 2, cw - 4, ch - 4, 24); x.fill();
+  x.font = font; x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(text, cw / 2, ch / 2 + 2);
+  const tex = new THREE.CanvasTexture(c);
+  tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+  sp.scale.set(wh * cw / ch, wh, 1); sp.renderOrder = 20;
+  return sp;
+}
+
+/* ---------- workbench ---------- */
+const table = new THREE.Mesh(new THREE.BoxGeometry(68, 0.6, 46), M(0x1b2b31, { roughness: 0.9 }));
+table.position.set(2, -0.3, -1); scene.add(table);
+
+/* ---------- Arduino ---------- */
+const ard = comp('ard');
+bx(ard, 13, 0.8, 9.6, -12, 0, 6, M(0x007b86));
+bx(ard, 3.2, 2.2, 3.6, -17.4, 0.8, 3.6, M(0xb9c0c5, { metalness: 0.8, roughness: 0.3 }));
+bx(ard, 3.0, 2.4, 3.4, -17.6, 0.8, 8.8, M(0x1d1f22));
+bx(ard, 5, 0.7, 1.6, -9.5, 0.8, 6.2, M(0x15181a));
+bx(ard, 1.4, 0.7, 1.4, -14.6, 0.8, 4.2, M(0xcc2b2b));
+function strip(g, cx, cz, len, bumps) {
+  bx(g, len, 1.0, 0.9, cx, 0.8, cz, M(0x16191b));
+  bumps.forEach(function (x) { bx(g, 0.4, 0.5, 0.4, x, 1.8, cz, M(0x2c3236)); });
+}
+strip(ard, -10.5, 1.6, 6.2, [-12, -11, -10, -9]);
+strip(ard, -13.5, 10.4, 4.0, [-15, -12]);
+strip(ard, -9.1, 10.4, 4.2, [-9.5, -8.5, -7.5]);
+
+/* ---------- soil sensor module (LM393) ---------- */
+const sens = comp('sens');
+bx(sens, 6.4, 0.5, 3.4, -4, 0, -7, M(0x1d3f8f));
+bx(sens, 5.1, 0.9, 0.9, -3.55, 0.5, -5.7, M(0x16191b));
+bx(sens, 1.8, 0.4, 1.0, -4.2, 0.5, -7.3, M(0x15181a));
+bx(sens, 1.2, 0.9, 1.2, -1.8, 0.5, -7.9, M(0x2f7be0));
+cyl(sens, 0.35, 0.35, 0.3, -1.8, 1.4, -7.9, M(0xd9dde0, { metalness: 0.7 }), 12);
+bx(sens, 1.6, 0.8, 0.8, -4, 0.5, -8.5, M(0xeeeeee));
+const ledPwr = bx(sens, 0.55, 0.3, 0.55, -6.0, 0.5, -8.2, M(0x2a0000, { emissive: 0xff2a2a, emissiveIntensity: 1.0 }));
+const ledDo = bx(sens, 0.55, 0.3, 0.55, -6.0, 0.5, -7.2, M(0x002a0a, { emissive: 0x00ff55, emissiveIntensity: 0 }));
+ledPwr.material.color.set(0xff2a2a);
+sens.add(at(label('Cảm biến độ ẩm LM393', 1.7, 46), -3.6, 4.4, -8.8));
+
+/* ---------- pot, soil, probe ---------- */
+const pot = comp('pot');
+cyl(pot, 4.2, 3.2, 5, -16, 0, -9, M(0xb5653a, { roughness: 0.85 }), 36);
+const soil = cyl(pot, 3.9, 3.9, 0.3, -16, 4.7, -9, M(0xc2a074, { roughness: 1 }), 36);
+bx(pot, 2.2, 7, 0.25, -16, 2.5, -9, M(0x1f7a4d));
+bx(pot, 0.4, 5.2, 0.3, -16.5, 3.2, -9, M(0xd9ad2b, { metalness: 0.8, roughness: 0.3 }));
+bx(pot, 0.4, 5.2, 0.3, -15.5, 3.2, -9, M(0xd9ad2b, { metalness: 0.8, roughness: 0.3 }));
+bx(pot, 1.4, 0.8, 0.5, -16, 9.5, -9, M(0xeeeeee));
+(function () {
+  const pts = [new V3(-4, 1.3, -8.7), new V3(-5, 3, -10.3), new V3(-10, 6, -11.6), new V3(-15, 11, -10.6), new V3(-16, 10.4, -9.2)];
+  const curve = new THREE.CatmullRomCurve3(pts);
+  pot.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.13, 8, false), M(0x111315)));
+})();
+pot.add(at(label('Bầu đất + đầu dò', 1.7, 46), -16, 13.4, -9));
+
+/* ---------- relay module ---------- */
+const rly = comp('rly');
+bx(rly, 8.4, 0.5, 7.8, 6, 0, 3.1, M(0x1c5a2e));
+bx(rly, 8.4, 1.8, 1.6, 6, 0.5, 0, M(0x1f8a43));
+bx(rly, 7.4, 0.3, 1.2, 6, 0.5, 1.9, M(0x2b3236));
+const copper = function () { return M(0xc7793a, { metalness: 0.8, roughness: 0.35 }); };
+const postNC = bx(rly, 0.5, 1.5, 0.5, 3.4, 0.8, 1.9, copper());
+const postNO = bx(rly, 0.5, 1.5, 0.5, 8.6, 0.8, 1.9, copper());
+bx(rly, 0.5, 0.9, 0.5, 6, 0.8, 1.9, copper());
+[3.4, 6, 8.6].forEach(function (x) { bx(rly, 0.3, 0.25, 0.6, x, 0.5, 1.05, copper()); });
+const lever = new THREE.Group(); lever.position.set(6, 1.7, 1.9); rly.add(lever);
+const leverBar = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.22, 0.4), M(0xe8edf0, { metalness: 0.7, roughness: 0.25 }));
+leverBar.position.x = 1.35; lever.add(leverBar);
+const OFF_ANG = Math.PI * 165 / 180, ON_ANG = Math.PI * 15 / 180;
+lever.rotation.z = OFF_ANG;
+bx(rly, 5.6, 3.2, 2.8, 6.6, 0.5, 4.4, M(0x2d6cdf, { transparent: true, opacity: 0.45, depthWrite: false }));
+const coil = cyl(rly, 1.0, 1.0, 2.2, 6.6, 0.6, 4.4, M(0xb8651f, { emissive: 0xff7a1a, emissiveIntensity: 0 }), 20);
+strip(rly, 4.4, 6.5, 3.6, []);
+const ledRly = bx(rly, 0.6, 0.3, 0.6, 9.5, 0.5, 6.4, M(0x2a0000, { emissive: 0xff2a2a, emissiveIntensity: 0 }));
+bx(rly, 0.6, 0.3, 0.6, 9.5, 0.5, 5.4, M(0x002a0a, { emissive: 0x00ff55, emissiveIntensity: 0.9 }));
+rly.add(at(label('Rơ-le 1 kênh', 1.7, 46), 6.6, 6.8, 4.4));
+[['NC', 3.4], ['COM', 6.0], ['NO', 8.6]].forEach(function (t) {
+  rly.add(at(label(t[0], 0.9, 52), t[1], 3.6, 1.9));
+});
+
+/* ---------- pump power source ---------- */
+const src = comp('src');
+bx(src, 8, 2.4, 4, 14, 0, -7, M(0x23282b));
+bx(src, 8.1, 0.35, 4.1, 14, 1.0, -7, M(0xd9ad2b));
+src.add(at(label('Nguồn bơm 6 V', 1.7, 46), 14, 5.4, -7));
+
+/* ---------- mini pump ---------- */
+const pump = comp('pump');
+const pumpBody = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 6, 36), M(0x2f3f52, { metalness: 0.4, roughness: 0.45 }));
+pumpBody.rotation.x = Math.PI / 2; pumpBody.position.set(22, 2.2, 2); pump.add(pumpBody);
+const cap = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.2, 32), M(0x5b6f84, { metalness: 0.5, roughness: 0.4 }));
+cap.rotation.x = Math.PI / 2; cap.position.set(22, 2.2, 5.05); pump.add(cap);
+const imp = new THREE.Group(); imp.position.set(22, 2.2, 5.3); pump.add(imp);
+[0, 60, 120].forEach(function (d) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.38, 0.2), M(0x9fd6ff, { metalness: 0.3 }));
+  b.rotation.z = Math.PI * d / 180; imp.add(b);
+});
+const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.6, 16), M(0x6a7f94));
+nozzle.rotation.x = Math.PI / 2; nozzle.position.set(22, 2.2, -1.8); pump.add(nozzle);
+pump.add(at(label('Bơm mini', 1.7, 46), 22, 7.4, 2));
+
+/* ---------- soil sensor, pump: pins ---------- */
+const pins = {};
+const pickables = [];
+const COMP_NAME = { ard: 'Arduino Uno', sens: 'Cảm biến độ ẩm LM393', rly: 'Rơ-le 1 kênh', src: 'Nguồn bơm', pump: 'Bơm mini' };
+const SHORT = { ard: 'Arduino', sens: 'Cảm biến', rly: 'Rơ-le', src: 'Nguồn', pump: 'Bơm' };
+function addPin(id, cid, name, x, yTop, z, o) {
+  o = o || {};
+  const g = comps[cid];
+  const ph = o.ph || 1.0, r = o.r || 0.28;
+  const mat = M(o.color || 0xd9ad2b, { metalness: 0.85, roughness: 0.28, emissive: 0x000000 });
+  const mesh = cyl(g, r, r, ph, x, yTop - ph, z, mat, 16);
+  const hit = new THREE.Mesh(new THREE.SphereGeometry(o.hit || 0.62, 10, 8), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+  hit.position.set(x, yTop - ph / 2, z); hit.userData.pin = id; hit.userData.noFade = true; g.add(hit); pickables.push(hit);
+  const lab = label(name, 0.9, 52);
+  lab.position.set(x + (o.lx || 0), yTop + (o.ly === undefined ? 1.0 : o.ly), z + (o.lz || 0));
+  g.add(lab);
+  pins[id] = { id: id, comp: cid, name: name, full: SHORT[cid] + ' · ' + name, pos: new V3(x, yTop, z), mesh: mesh, mat: mat, base: mat.color.getHex() };
+}
+// Arduino (header top 1.8, pin top 2.8)
+addPin('ard5v', 'ard', '5V', -14, 2.8, 10.4, { lz: 1.0 });
+addPin('ardGND', 'ard', 'GND', -13, 2.8, 10.4, { lz: 1.0, lx: 0.4 });
+addPin('ardA0', 'ard', 'A0', -10.5, 2.8, 10.4, { lz: 1.0 });
+addPin('ardD7', 'ard', 'D7', -13, 2.8, 1.6, { lz: -1.0 });
+addPin('ardD2', 'ard', 'D2', -8, 2.8, 1.6, { lz: -1.0 });
+// sensor (header top 1.4, pin top 2.4)
+addPin('sensVCC', 'sens', 'VCC', -5.5, 2.4, -5.7, { lz: 1.0 });
+addPin('sensGND', 'sens', 'GND', -4.2, 2.4, -5.7, { lz: 1.0, ly: 1.5 });
+addPin('sensDO', 'sens', 'DO', -2.9, 2.4, -5.7, { lz: 1.0 });
+addPin('sensAO', 'sens', 'AO', -1.6, 2.4, -5.7, { lz: 1.0, ly: 1.5 });
+// relay control header (top 1.5, pin top 2.5)
+addPin('rlyVCC', 'rly', 'VCC', 3.2, 2.5, 6.5, { lz: 1.0 });
+addPin('rlyGND', 'rly', 'GND', 4.4, 2.5, 6.5, { lz: 1.0, ly: 1.6 });
+addPin('rlyIN', 'rly', 'IN', 5.6, 2.5, 6.5, { lz: 1.0 });
+// relay terminals
+addPin('rlyNC', 'rly', 'NC', 3.4, 2.7, 0, { ph: 0.4, r: 0.5, hit: 0.9, lz: -1.2, ly: 0.9 });
+addPin('rlyCOM', 'rly', 'COM', 6.0, 2.7, 0, { ph: 0.4, r: 0.5, hit: 0.9, lz: -1.2, ly: 0.9 });
+addPin('rlyNO', 'rly', 'NO', 8.6, 2.7, 0, { ph: 0.4, r: 0.5, hit: 0.9, lz: -1.2, ly: 0.9 });
+// source and pump terminals
+addPin('srcP', 'src', '+', 11.5, 3.4, -7, { color: 0xd7263d, r: 0.55, hit: 0.9, ly: 1.1 });
+addPin('srcN', 'src', '−', 16.5, 3.4, -7, { color: 0x6c7a86, r: 0.55, hit: 0.9, ly: 1.1 });
+addPin('pumpP', 'pump', '+', 21, 5.4, 3.5, { color: 0xd7263d, ph: 1.4, r: 0.5, hit: 0.9, ly: 1.1 });
+addPin('pumpN', 'pump', '−', 23, 5.4, 3.5, { color: 0x6c7a86, ph: 1.4, r: 0.5, hit: 0.9, ly: 1.1 });
+
+/* ---------- simulation state ---------- */
+const TH = 40;
+const S = { moist: 62, auto: false, relay: false, toggles: 0, mode: 'all', sel: null };
+S.relay = S.moist < TH;
+const dry = function () { return S.moist < TH; };
+const aoVal = function () { return Math.round((1 - S.moist / 100) * 1023); };
+
+/* ---------- wires ---------- */
+const wires = [];
+const wireGroup = new THREE.Group(); scene.add(wireGroup);
+const SPEED = 9;
+function mkWire(id, a, b, o) {
+  const w = Object.assign({ id: id, a: a, b: b, group: 'ctrl', color: 0xd7263d, lift: 0, off: [0, 0], active: function () { return true; } }, o);
+  const pa = pins[a].pos, pb = pins[b].pos;
+  const d = pa.distanceTo(pb);
+  const h = 2.2 + 0.1 * d + w.lift;
+  const off = new V3(w.off[0], 0, w.off[1]);
+  const up = function (p, k) { return p.clone().add(new V3(0, k, 0)); };
+  const pts = [pa.clone(), up(pa, 1.2), up(pa.clone().lerp(pb, 0.22), h).add(off), up(pa.clone().lerp(pb, 0.5), h * 1.08).add(off),
+    up(pa.clone().lerp(pb, 0.78), h).add(off), up(pb, 1.2), pb.clone()];
+  w.curve = new THREE.CatmullRomCurve3(pts);
+  w.mat = new THREE.MeshStandardMaterial({ color: w.color, roughness: 0.5, emissive: w.color, emissiveIntensity: 0.14 });
+  w.mesh = new THREE.Mesh(new THREE.TubeGeometry(w.curve, 90, 0.14, 8, false), w.mat);
+  w.glow = new THREE.Mesh(new THREE.TubeGeometry(w.curve, 90, 0.36, 8, false), new THREE.MeshBasicMaterial({ color: 0x7ff5e6, transparent: true, opacity: 0.38, depthWrite: false }));
+  w.glow.visible = false;
+  wireGroup.add(w.mesh); wireGroup.add(w.glow);
+  addParts(w, 0xfff1a6, 0.19);
+  wires.push(w); return w;
+}
+function addParts(w, color, r) {
+  w.len = w.curve.getLength();
+  w.pmat = new THREE.MeshBasicMaterial({ color: color, transparent: true });
+  const n = Math.max(5, Math.min(14, Math.round(w.len / 3.4)));
+  w.parts = [];
+  const geo = new THREE.SphereGeometry(r, 10, 8);
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(geo, w.pmat); m.visible = false; wireGroup.add(m);
+    w.parts.push({ t: i / n, m: m });
+  }
+  w.k = 1;
+}
+const always = function () { return true; };
+const isDry = function () { return dry(); };
+const isOn = function () { return S.relay; };
+mkWire('w5v_s', 'ard5v', 'sensVCC', { color: 0xd7263d, lift: 4, off: [0, -1.5], active: always });
+mkWire('w5v_r', 'ard5v', 'rlyVCC', { color: 0xd7263d, lift: 0, off: [0, 0], active: always });
+mkWire('wgnd_s', 'sensGND', 'ardGND', { color: 0x9a7248, lift: 7, off: [0, 1.5], active: always });
+mkWire('wgnd_r', 'rlyGND', 'ardGND', { color: 0x9a7248, lift: 2, off: [0, 1], active: always });
+mkWire('wdo', 'sensDO', 'ardD2', { color: 0xf2b01e, lift: 1, active: isDry });
+mkWire('wao', 'sensAO', 'ardA0', { color: 0x35c76a, lift: 3, off: [0, 2.5], active: always });
+mkWire('wd7', 'rlyIN', 'ardD7', { color: 0xa56bff, lift: 5, off: [0, -1], active: isOn });
+mkWire('wsrc', 'srcP', 'rlyCOM', { group: 'load', color: 0xd7263d, lift: 1.5, active: isOn });
+mkWire('wno', 'rlyNO', 'pumpP', { group: 'load', color: 0xff7a1a, lift: 0.5, active: isOn });
+mkWire('wpump', 'pumpN', 'srcN', { group: 'load', color: 0x8794a0, lift: 3, off: [0, 1.5], active: isOn });
+
+// water hose from pump outlet to the pot
+(function () {
+  const w = { id: 'water', water: true, group: 'load', active: isOn };
+  w.curve = new THREE.CatmullRomCurve3([
+    new V3(22, 2.2, -2.6), new V3(22, 1.2, -5.5), new V3(22, 0.7, -14), new V3(4, 0.7, -14), new V3(-14, 0.7, -14),
+    new V3(-14, 6, -14), new V3(-14, 8.6, -12), new V3(-14, 7.0, -9.8), new V3(-14, 5.7, -9.0)]);
+  w.mat = new THREE.MeshStandardMaterial({ color: 0x4aa8d8, transparent: true, opacity: 0.5, roughness: 0.2 });
+  w.mesh = new THREE.Mesh(new THREE.TubeGeometry(w.curve, 160, 0.32, 10, false), w.mat);
+  wireGroup.add(w.mesh);
+  addParts(w, 0x9fe0ff, 0.22);
+  w.mat.userData.bo = 0.5;
+  wires.push(w);
+})();
+
+/* ---------- visibility, selection ---------- */
+const VIEW_COMPS = { all: ['ard', 'sens', 'pot', 'rly', 'src', 'pump'], ctrl: ['ard', 'sens', 'pot', 'rly'], load: ['rly', 'src', 'pump'] };
+function fade(g, k) {
+  g.traverse(function (o) {
+    if (o.userData.noFade || !o.material) return;
+    const ms = Array.isArray(o.material) ? o.material : [o.material];
+    ms.forEach(function (m) {
+      if (m.userData.bo === undefined) m.userData.bo = m.opacity;
+      const bo = m.userData.bo;
+      m.opacity = bo * k;
+      const tr = bo < 1 || k < 1;
+      if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; }
+      m.depthWrite = (k >= 1 && bo >= 1);
+    });
+  });
+}
+function connected(w, id) { return w.a === id || w.b === id; }
+function applyVis() {
+  Object.keys(comps).forEach(function (id) { fade(comps[id], VIEW_COMPS[S.mode].indexOf(id) >= 0 ? 1 : 0.14); });
+  wires.forEach(function (w) {
+    let k = (S.mode === 'all' || w.group === S.mode) ? 1 : 0.1;
+    if (S.sel && !(w.a && connected(w, S.sel))) k *= 0.25;
+    w.k = k;
+    const tr = k < 1 || w.water;
+    w.mat.opacity = w.water ? 0.5 * k : k;
+    if (w.mat.transparent !== (tr)) { w.mat.transparent = tr; w.mat.needsUpdate = true; }
+    w.pmat.opacity = k;
+    if (w.glow) w.glow.visible = !!(S.sel && connected(w, S.sel));
+  });
+  Object.keys(pins).forEach(function (id) {
+    const p = pins[id];
+    let on = 0;
+    if (S.sel === id) on = 2;
+    else if (S.sel && wires.some(function (w) { return w.a && connected(w, S.sel) && connected(w, id); })) on = 1;
+    p.hl = on;
+    p.mat.emissive.setHex(on === 2 ? 0x3dd6c1 : on === 1 ? 0x1f8f80 : 0x000000);
+    p.mat.emissiveIntensity = on ? 0.9 : 0;
+    p.mesh.scale.set(on === 2 ? 1.7 : 1, 1, on === 2 ? 1.7 : 1);
+  });
+}
+
+/* ---------- pin information ---------- */
+const hi = function (t) { return dry() ? t[0] : t[1]; };
+const INFO = {
+  ard5v: { role: 'Chân cấp nguồn 5V của Arduino. Cấp điện cho cảm biến và cuộn dây rơ-le.',
+    state: function () { return '5,0 V, luôn có điện'; },
+    note: 'Khi cấp qua cổng USB, dòng 5V bị giới hạn khoảng 500 mA. Một rơ-le 5V thường hút 70–90 mA nên đủ dùng, nhưng nhiều rơ-le cùng lúc thì nên cấp nguồn 5V riêng.' },
+  ardGND: { role: 'Chân mass chung của mạch 5V, là mốc 0V cho cảm biến, rơ-le và Arduino.',
+    state: function () { return '0 V (mốc chung)'; },
+    note: 'Cảm biến, rơ-le và Arduino phải chung mass thì tín hiệu mới có mốc điện áp đúng. Mạch bơm đã được rơ-le cách ly nên không nối vào GND này.' },
+  ardD2: { role: 'Chân vào số. Đọc mức ra DO của cảm biến để biết đất khô hay ẩm.',
+    state: function () { return hi(['CAO (5 V): đất khô', 'THẤP (0 V): đất ẩm']); },
+    note: 'Đọc bằng digitalRead. Nên giữ trạng thái vài giây trước khi đổi để tránh bơm đóng ngắt liên tục khi độ ẩm dao động quanh ngưỡng.' },
+  ardA0: { role: 'Chân vào tương tự. Đọc điện áp AO để biết độ ẩm theo từng mức, không chỉ khô hay ẩm.',
+    state: function () { const a = aoVal(); return a + ' / 1023 ≈ ' + (a / 1023 * 5).toFixed(2) + ' V'; },
+    note: 'analogRead trả về 0 đến 1023. Hãy đo giá trị lúc đất khô hẳn và lúc tưới đẫm để đặt ngưỡng, vì mỗi cảm biến mỗi khác. Nên lấy trung bình nhiều lần đọc để giảm nhiễu.' },
+  ardD7: { role: 'Chân ra số. Điều khiển chân IN của rơ-le.',
+    state: function () { return S.relay ? 'THẤP (0 V): kéo IN xuống, rơ-le hút' : 'CAO (5 V): rơ-le nhả'; },
+    note: 'Rơ-le kích mức THẤP: ghi HIGH trước rồi mới gọi pinMode(7, OUTPUT) để bơm không chạy thoáng qua lúc khởi động.' },
+  sensVCC: { role: 'Chân cấp nguồn (3,3–5 V) cho module LM393.',
+    state: function () { return '5 V từ Arduino'; },
+    note: 'Đầu dò điện trở bị ăn mòn nhanh khi luôn có điện. Có thể cấp nguồn qua một chân số và chỉ bật lúc đo.' },
+  sensGND: { role: 'Chân mass của module cảm biến.',
+    state: function () { return '0 V'; },
+    note: 'Dùng quy ước màu cho dây (đỏ cho nguồn, đen hoặc nâu cho mass) để dễ kiểm tra khi lắp thật. Đầu dò kim loại nối vào module qua cáp riêng.' },
+  sensDO: { role: 'Ngõ ra số của IC so sánh LM393. So độ ẩm với ngưỡng đặt bằng biến trở trên module.',
+    state: function () { return hi(['CAO (5 V): đất khô', 'THẤP (0 V): đất ẩm']); },
+    note: 'Vặn biến trở cho đến khi LED DO đổi trạng thái đúng độ ẩm mong muốn. Module phổ biến cho DO = CAO khi khô, nhưng có loại làm ngược lại, hãy thử bằng LED trên bo.' },
+  sensAO: { role: 'Ngõ ra tương tự, điện áp thay đổi liên tục theo độ ẩm của đất.',
+    state: function () { const a = aoVal(); return a + ' / 1023 ≈ ' + (a / 1023 * 5).toFixed(2) + ' V'; },
+    note: 'Trên hầu hết module, đất khô cho điện áp cao và đất ướt cho điện áp thấp. Kiểm tra bằng đồng hồ đo trước khi viết code.' },
+  rlyVCC: { role: 'Chân cấp nguồn 5V cho cuộn dây và đèn LED của rơ-le.',
+    state: function () { return '5 V từ Arduino'; },
+    note: 'Nếu module có jumper JD-VCC, chỉ tháo jumper khi dùng nguồn riêng cho cuộn dây. Nếu không, hãy để nguyên jumper.' },
+  rlyGND: { role: 'Chân mass của mạch điều khiển rơ-le.',
+    state: function () { return '0 V'; },
+    note: 'Nối về GND chung của Arduino. Đây là mass của mạch 5V, không phải mass của nguồn bơm.' },
+  rlyIN: { role: 'Chân kích rơ-le. Arduino kéo chân này xuống THẤP thì cuộn dây có dòng và rơ-le hút.',
+    state: function () { return S.relay ? 'THẤP (0 V): cuộn dây có dòng, rơ-le hút' : 'CAO (5 V): không có dòng, rơ-le nhả'; },
+    note: 'Đây là kiểu kích mức THẤP phổ biến. Module kích mức CAO làm ngược lại, xem chữ ghi trên bo hoặc thử bằng đèn LED của rơ-le.' },
+  rlyCOM: { role: 'Tiếp điểm chung của công tắc. Chỉ dây dương của nguồn bơm đi qua đây.',
+    state: function () { return S.relay ? 'Đang nối với NO: dòng đi tới bơm' : 'Đang nối với NC (bỏ trống): không có dòng'; },
+    note: 'Dây âm của bơm đi thẳng về nguồn, không qua rơ-le. Dòng định mức của tiếp điểm (thường 10 A) phải lớn hơn dòng bơm nhiều lần.' },
+  rlyNO: { role: 'Tiếp điểm thường hở. Chỉ nối với COM khi rơ-le hút, nên bơm chỉ chạy lúc đó.',
+    state: function () { return S.relay ? 'Đóng với COM: có +6 V tới bơm' : 'Hở: không có điện'; },
+    note: 'Nếu nối nhầm sang NC thì bơm sẽ chạy khi đất ẩm và dừng khi đất khô, ngược với mong muốn.' },
+  rlyNC: { role: 'Tiếp điểm thường đóng. Nối với COM khi rơ-le nhả. Mô hình này bỏ trống chân này.',
+    state: function () { return S.relay ? 'Hở với COM' : 'Đóng với COM, nhưng không đấu dây nên không có dòng'; },
+    note: 'Dùng NC khi muốn tải chạy lúc rơ-le nhả, kể cả khi Arduino chưa có điện. Với bơm tưới cây thì thường chọn NO để an toàn.' },
+  srcP: { role: 'Cực dương của nguồn bơm. Nối tới chân COM của rơ-le.',
+    state: function () { return S.relay ? '+6 V so với cực −, đang có dòng chảy' : '+6 V so với cực −, chưa có dòng chảy'; },
+    note: 'Chọn nguồn đúng điện áp của bơm (ví dụ 6 V). Nên có cầu chì nhỏ ở dây dương để bảo vệ.' },
+  srcN: { role: 'Cực âm của nguồn bơm. Nhận dòng trở về từ cực âm của bơm.',
+    state: function () { return '0 V (mốc của mạch bơm)'; },
+    note: 'Dây âm đi thẳng từ bơm về nguồn, không qua rơ-le và không nối chung với GND của Arduino.' },
+  pumpP: { role: 'Cực dương của bơm mini. Nhận điện từ chân NO của rơ-le.',
+    state: function () { return S.relay ? '+6 V, bơm quay' : 'Không có điện'; },
+    note: 'Bơm mini DC thường 3–6 V, dòng 100–300 mA. Đấu ngược cực sẽ làm bơm quay ngược chiều, hút thành đẩy.' },
+  pumpN: { role: 'Cực âm của bơm mini. Nối thẳng về cực âm của nguồn.',
+    state: function () { return S.relay ? 'Dòng chạy về cực − nguồn' : 'Không có dòng'; },
+    note: 'Bơm là động cơ nên nên gắn một diode (ví dụ 1N4007) song song, ngược chiều, để triệt xung điện áp khi ngắt, bảo vệ tiếp điểm rơ-le.' }
+};
+
+/* ---------- UI ---------- */
+const $ = function (id) { return document.getElementById(id); };
+function buildList() {
+  const groups = [['ard', ['ard5v', 'ardGND', 'ardD2', 'ardA0', 'ardD7']], ['sens', ['sensVCC', 'sensGND', 'sensDO', 'sensAO']],
+    ['rly', ['rlyVCC', 'rlyGND', 'rlyIN', 'rlyCOM', 'rlyNO', 'rlyNC']], ['src', ['srcP', 'srcN']], ['pump', ['pumpP', 'pumpN']]];
+  const root = $('pins'); root.textContent = '';
+  groups.forEach(function (g) {
+    const d = document.createElement('div'); d.className = 'grp';
+    const h = document.createElement('h3'); h.textContent = COMP_NAME[g[0]]; d.appendChild(h);
+    const c = document.createElement('div'); c.className = 'chips';
+    g[1].forEach(function (id) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.pin = id;
+      b.textContent = pins[id].name; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () { select(S.sel === id ? null : id, true); });
+      c.appendChild(b);
+    });
+    d.appendChild(c); root.appendChild(d);
+  });
+}
+function renderInfo() {
+  const box = $('info');
+  if (!S.sel) {
+    box.innerHTML = '<p class="empty">Chạm vào một chân vàng trên mô hình, hoặc chọn trong danh sách bên dưới. Camera sẽ bay tới chân đó, chân phát sáng và dây nối với nó nổi lên.</p>';
+    return;
+  }
+  const p = pins[S.sel], I = INFO[S.sel];
+  const links = wires.filter(function (w) { return w.a && connected(w, S.sel); })
+    .map(function (w) { return pins[w.a === S.sel ? w.b : w.a].full; });
+  const ul = links.length ? '<ul>' + links.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>' : '<span>Chưa đấu dây (để trống trong mô hình này)</span>';
+  box.innerHTML = '<div class="tag">' + COMP_NAME[p.comp] + '</div><h3>' + p.full + '</h3>' +
+    '<dl><div><dt>Vai trò</dt><dd>' + I.role + '</dd></div>' +
+    '<div><dt>Nối với</dt><dd>' + ul + '</dd></div>' +
+    '<div><dt>Tín hiệu hiện tại</dt><dd><span class="live" id="info-live"></span></dd></div>' +
+    '<div><dt>Khi đấu thật</dt><dd>' + I.note + '</dd></div></dl>';
+  refreshLive();
+}
+function refreshLive() { const el = $('info-live'); if (el && S.sel) el.textContent = INFO[S.sel].state(); }
+function setV(id, text, s) { const el = $(id); el.textContent = text; if (s) el.dataset.s = s; else delete el.dataset.s; }
+function refreshUI() {
+  $('moist-val').textContent = S.moist.toFixed(S.auto ? 1 : 0) + '%';
+  if (S.auto) $('moist').value = String(Math.round(S.moist));
+  const a = aoVal();
+  setV('s-ao', a + ' / 1023', null);
+  setV('s-do', dry() ? 'CAO · đất khô' : 'THẤP · đất ẩm', dry() ? 'hi' : 'lo');
+  setV('s-d7', S.relay ? 'THẤP · kéo IN xuống' : 'CAO · nhả', S.relay ? 'lo' : 'hi');
+  setV('s-rly', S.relay ? 'COM–NO · hút' : 'COM–NC · nhả', S.relay ? 'lo' : null);
+  setV('s-pump', S.relay ? 'Đang chạy' : 'Dừng', S.relay ? 'lo' : null);
+  setV('s-cnt', String(S.toggles), null);
+  refreshLive();
+}
+function syncChips() {
+  document.querySelectorAll('.chip').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.pin === S.sel ? 'true' : 'false'); });
+}
+
+/* ---------- camera ---------- */
+let tween = null;
+const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function flyTo(pos, target) {
+  tween = { t: 0, d: reduce ? 0.01 : 0.9, p0: camera.position.clone(), p1: pos.clone(), t0: controls.target.clone(), t1: target.clone() };
+}
+controls.addEventListener('start', function () { tween = null; });
+function select(id, fly) {
+  S.sel = id;
+  if (id && S.mode !== 'all' && VIEW_COMPS[S.mode].indexOf(pins[id].comp) < 0) setMode('all');
+  applyVis(); renderInfo(); syncChips();
+  if (id && fly) {
+    const target = pins[id].pos.clone();
+    const dir = camera.position.clone().sub(controls.target);
+    dir.y = Math.max(dir.y, dir.length() * 0.4);
+    dir.normalize();
+    flyTo(target.clone().addScaledVector(dir, 15), target);
+  }
+}
+function setMode(m) {
+  S.mode = m;
+  document.querySelectorAll('.seg button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.mode === m ? 'true' : 'false'); });
+  applyVis();
+}
+
+/* ---------- picking ---------- */
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+function pick(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(pickables, false);
+  return hits.length ? hits[0].object.userData.pin : null;
+}
+let down = null;
+renderer.domElement.addEventListener('pointerdown', function (e) { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+renderer.domElement.addEventListener('pointerup', function (e) {
+  if (!down) return;
+  const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t;
+  down = null;
+  if (moved > 6 || dt > 700) return;
+  const id = pick(e);
+  select(id, !!id);
+});
+let hoverBusy = false;
+renderer.domElement.addEventListener('pointermove', function (e) {
+  if (e.buttons || hoverBusy) return;
+  hoverBusy = true;
+  requestAnimationFrame(function () { hoverBusy = false; renderer.domElement.style.cursor = pick(e) ? 'pointer' : 'grab'; });
+});
+
+/* ---------- controls wiring ---------- */
+$('moist').addEventListener('input', function (e) { S.moist = Number(e.target.value); refreshUI(); });
+$('auto').addEventListener('change', function (e) { S.auto = e.target.checked; if (S.auto) S.toggles = 0; refreshUI(); });
+document.querySelectorAll('.seg button').forEach(function (b) { b.addEventListener('click', function () { setMode(b.dataset.mode); }); });
+$('btn-home').addEventListener('click', function () { flyTo(HOME.pos, HOME.target); });
+
+/* ---------- resize ---------- */
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.fov = w / h < 0.9 ? 58 : 40;
+  camera.updateProjectionMatrix();
+}
+if (window.ResizeObserver) new ResizeObserver(resize).observe(view); else window.addEventListener('resize', resize);
+resize();
+
+/* ---------- animation loop ---------- */
+const clock = new THREE.Clock();
+const tmp = new V3();
+const SOIL_DRY = new THREE.Color(0xc2a074), SOIL_WET = new THREE.Color(0x3d2a1b);
+let time = 0, tickAcc = 0, uiAcc = 0, pumpSpeed = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  time += dt;
+
+  // Arduino loop() every 100 ms reads DO and drives D7
+  tickAcc += dt;
+  if (tickAcc >= 0.1) {
+    tickAcc = 0;
+    const want = dry();
+    if (want !== S.relay) { S.relay = want; S.toggles++; refreshUI(); }
+  }
+  if (S.auto) { S.moist = Math.max(0, Math.min(100, S.moist + (S.relay ? 7 : -3) * dt)); }
+  uiAcc += dt;
+  if (uiAcc > 0.12) { uiAcc = 0; refreshUI(); }
+
+  if (tween) {
+    tween.t += dt;
+    const k = Math.min(1, tween.t / tween.d);
+    const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    camera.position.lerpVectors(tween.p0, tween.p1, e);
+    controls.target.lerpVectors(tween.t0, tween.t1, e);
+    if (k >= 1) tween = null;
+  }
+  controls.update();
+
+  // relay lever, coil, LEDs
+  const targetAng = S.relay ? ON_ANG : OFF_ANG;
+  lever.rotation.z += (targetAng - lever.rotation.z) * Math.min(1, dt * 28);
+  coil.material.emissiveIntensity = S.relay ? 0.9 : 0;
+  ledRly.material.emissiveIntensity = S.relay ? 1.2 : 0;
+  ledDo.material.emissiveIntensity = dry() ? 0 : 1.1;
+  postNC.material.emissive.setHex(S.relay ? 0x000000 : 0x00aa66);
+  postNO.material.emissive.setHex(S.relay ? 0x00aa66 : 0x000000);
+  pumpSpeed += ((S.relay ? 18 : 0) - pumpSpeed) * Math.min(1, dt * 5);
+  imp.rotation.z -= pumpSpeed * dt;
+  soil.material.color.copy(SOIL_DRY).lerp(SOIL_WET, S.moist / 100);
+
+  // selected pin pulse
+  const sel = S.sel && pins[S.sel];
+  if (sel) {
+    sel.mat.emissiveIntensity = 0.65 + 0.35 * Math.sin(time * 6);
+    wires.forEach(function (w) { if (w.glow && w.glow.visible) w.glow.material.opacity = 0.26 + 0.16 * Math.sin(time * 6); });
+  }
+
+  // current particles
+  wires.forEach(function (w) {
+    const act = w.active();
+    w.parts.forEach(function (p) {
+      p.m.visible = act;
+      if (!act) return;
+      p.t = (p.t + dt * SPEED / w.len) % 1;
+      w.curve.getPointAt(p.t, tmp);
+      p.m.position.copy(tmp);
+    });
+  });
+
+  renderer.render(scene, camera);
+}
+
+buildList();
+renderInfo();
+applyVis();
+refreshUI();
+renderer.domElement.style.cursor = 'grab';
+frame();
+})();
+</script>
+
+</body></html>
